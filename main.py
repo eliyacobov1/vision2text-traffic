@@ -8,6 +8,7 @@ import cv2
 from detector.yolo_detector import YOLODetector
 from analyzer.congestion_detector import CongestionDetector
 from utils.video import create_writer
+from flamingo.vision_text_model import FlamingoVisionTextModel
 
 try:
     from captioner.generate_caption import CaptionGenerator
@@ -34,6 +35,8 @@ def main(args: argparse.Namespace) -> None:
     detector = YOLODetector(args.model, device=args.device)
     congestion = CongestionDetector()
     captioner = CaptionGenerator() if args.caption and CaptionGenerator else None
+    flamingo = FlamingoVisionTextModel(
+        detector, captioner) if getattr(args, "flamingo", False) else None
 
     cap = cv2.VideoCapture(args.input)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -48,10 +51,13 @@ def main(args: argparse.Namespace) -> None:
         if not ret:
             break
 
-        detections = detector.detect(frame)
+        if flamingo:
+            detections, caption = flamingo.process(frame)
+        else:
+            detections = detector.detect(frame)
+            caption = captioner.caption(frame) if captioner else ""
         congested = congestion.update(detections)
         status = "Congested" if congested else "Free"
-        caption = captioner.caption(frame) if captioner else ""
 
         annotate_frame(frame, detections, status, caption)
         writer.write(frame)
@@ -73,4 +79,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="yolov5s.pt", help="YOLO model weights")
     parser.add_argument("--device", default="cpu", help="Computation device")
     parser.add_argument("--caption", action="store_true", help="Enable caption generation")
+    parser.add_argument(
+        "--flamingo", action="store_true", help="Use Flamingo-inspired architecture"
+    )
     main(parser.parse_args())
