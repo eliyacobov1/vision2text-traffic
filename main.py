@@ -6,12 +6,16 @@ from typing import List, Dict
 import cv2
 
 from detector.yolo_detector import YOLODetector
+from detector.simple_detector import SimpleMotionDetector
+from detector.cnn_detector import CNNDetector
 from analyzer.congestion_detector import CongestionDetector
 from utils.video import create_writer
 from flamingo.vision_text_model import FlamingoVisionTextModel
 
 try:
     from captioner.generate_caption import CaptionGenerator
+    from captioner.simple_captioner import SimpleCaptioner
+    from captioner.transformer_captioner import VisionLanguageModel
 except Exception:  # pragma: no cover - captioning is optional
     CaptionGenerator = None  # type: ignore
 
@@ -32,11 +36,24 @@ def annotate_frame(frame, detections: List[Dict], status: str, caption: str = ""
 
 
 def main(args: argparse.Namespace) -> None:
-    detector = YOLODetector(args.model, device=args.device)
+    if getattr(args, "scratch", False):
+        detector = CNNDetector(device=args.device)
+        captioner = VisionLanguageModel().to(args.device) if args.caption else None
+    elif args.simple:
+        detector = SimpleMotionDetector()
+        captioner = SimpleCaptioner() if args.caption else None
+    else:
+        detector = YOLODetector(args.model, device=args.device)
+        captioner = (
+            CaptionGenerator() if args.caption and CaptionGenerator else None
+        )
+
     congestion = CongestionDetector()
-    captioner = CaptionGenerator() if args.caption and CaptionGenerator else None
-    flamingo = FlamingoVisionTextModel(
-        detector, captioner) if getattr(args, "flamingo", False) else None
+    flamingo = (
+        FlamingoVisionTextModel(detector, captioner)
+        if getattr(args, "flamingo", False)
+        else None
+    )
 
     cap = cv2.VideoCapture(args.input)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -81,5 +98,15 @@ if __name__ == "__main__":
     parser.add_argument("--caption", action="store_true", help="Enable caption generation")
     parser.add_argument(
         "--flamingo", action="store_true", help="Use Flamingo-inspired architecture"
+    )
+    parser.add_argument(
+        "--simple",
+        action="store_true",
+        help="Use from-scratch detector and captioner",
+    )
+    parser.add_argument(
+        "--scratch",
+        action="store_true",
+        help="Use deep models implemented from scratch",
     )
     main(parser.parse_args())
