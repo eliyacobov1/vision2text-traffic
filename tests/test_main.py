@@ -34,6 +34,7 @@ def test_main_pipeline(tmp_path, monkeypatch):
         model='fake.pt',
         device='cpu',
         caption=True,
+        simple=False,
     )
 
     main.main(args)
