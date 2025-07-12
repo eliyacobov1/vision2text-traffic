@@ -3,7 +3,11 @@
 from typing import List, Dict
 
 import numpy as np
-import torch
+
+try:  # optional dependency
+    import torch
+except Exception:  # pragma: no cover - torch may be missing
+    torch = None  # type: ignore
 
 
 class YOLODetector:
@@ -16,6 +20,8 @@ class YOLODetector:
             model_path: Path to the YOLOv5 weights.
             device: Device string for computation (e.g., ``"cpu"`` or ``"cuda"``).
         """
+        if torch is None:
+            raise ImportError("PyTorch is required for YOLODetector")
         self.model = torch.hub.load(
             "ultralytics/yolov5", "custom", path=model_path, trust_repo=True
         )

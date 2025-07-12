@@ -1,5 +1,6 @@
 import numpy as np
-import torch
+import pytest
+torch = pytest.importorskip("torch")
 import types
 
 from detector.yolo_detector import YOLODetector
