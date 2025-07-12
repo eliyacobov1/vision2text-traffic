@@ -32,6 +32,27 @@ Add `--caption` to enable caption generation (requires additional model download
 
 The script outputs an annotated video, a log of congestion status for each frame, and optional captions overlayed on the frames.
 
+## Quick Demo
+
+Run a self-contained demonstration using a short sample video. The script
+downloads the clip automatically and executes the end‑to‑end pipeline. Three
+modes are available:
+
+* **full** – YOLOv5 detection with a transformer captioning model.
+* **simple** – motion based detector with rule‑based captions.
+* **scratch** – tiny CNN detector and transformer written from scratch.
+
+```bash
+# full pipeline with captions and Flamingo temporal context
+python demo.py --mode full --caption --flamingo
+
+# lightweight demo that avoids heavy model downloads
+python demo.py --mode simple
+```
+
+After processing, the script reports how many frames were marked as congested and
+the location of the generated video and log file.
+
 ## Scene Understanding Pipeline
 
 This project demonstrates how detection, tracking and captioning interact to

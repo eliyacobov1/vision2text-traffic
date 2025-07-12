@@ -9,7 +9,7 @@ from detector.yolo_detector import YOLODetector
 from detector.simple_detector import SimpleMotionDetector
 from detector.cnn_detector import CNNDetector
 from analyzer.congestion_detector import CongestionDetector
-from utils.video import create_writer
+from traffic_utils.video import create_writer
 from flamingo.vision_text_model import FlamingoVisionTextModel
 
 try:
@@ -35,7 +35,7 @@ def annotate_frame(frame, detections: List[Dict], status: str, caption: str = ""
                     (255, 0, 0), 1)
 
 
-def main(args: argparse.Namespace) -> None:
+def main(args: argparse.Namespace, progress=None) -> None:
     if getattr(args, "scratch", False):
         detector = CNNDetector(device=args.device)
         captioner = VisionLanguageModel().to(args.device) if args.caption else None
@@ -72,7 +72,13 @@ def main(args: argparse.Namespace) -> None:
             detections, caption = flamingo.process(frame)
         else:
             detections = detector.detect(frame)
-            caption = captioner.caption(frame) if captioner else ""
+            if captioner:
+                if hasattr(captioner, "caption"):
+                    caption = captioner.caption(frame)
+                else:
+                    caption = captioner.generate(frame)
+            else:
+                caption = ""
         congested = congestion.update(detections)
         status = "Congested" if congested else "Free"
 
@@ -80,6 +86,8 @@ def main(args: argparse.Namespace) -> None:
         writer.write(frame)
         log_lines.append(f"{frame_index},{status}\n")
         frame_index += 1
+        if progress:
+            progress()
 
     cap.release()
     writer.release()
