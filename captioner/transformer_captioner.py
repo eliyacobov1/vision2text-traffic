@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import List
 
+import cv2
+
 try:  # optional dependency
     import torch
     from torch import nn
@@ -87,20 +89,66 @@ if torch is not None:
             return logits
 
         @torch.no_grad()
-        def generate(self, image: np.ndarray, max_len: int = 20, device: str = "cpu") -> str:
+        def generate(
+            self,
+            image: np.ndarray,
+            boxes: List[List[int]] | None = None,
+            max_len: int = 20,
+            device: str = "cpu",
+        ) -> str:
+            """Generate caption optionally using object region features.
+
+            Args:
+                image: BGR image array.
+                boxes: Optional list of ``[x1, y1, x2, y2]`` regions describing
+                    detected objects. When provided, features from these regions
+                    are averaged with the global image feature before decoding.
+                max_len: Maximum length of generated caption.
+                device: Device string for computation.
+
+            Returns:
+                Generated caption string.
+            """
+
             self.eval()
             tensor = torch.from_numpy(image).permute(2, 0, 1).float().unsqueeze(0) / 255
             tensor = tensor.to(device)
-            memory = self.encoder(tensor).unsqueeze(0)
+            memory = [self.encoder(tensor)]
+
+            if boxes:
+                crops = []
+                h, w, _ = image.shape
+                for b in boxes:
+                    x1, y1, x2, y2 = map(int, b)
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(w, x2), min(h, y2)
+                    crop = image[y1:y2, x1:x2]
+                    if crop.size != 0:
+                        crop = cv2.resize(crop, (image.shape[1], image.shape[0]))
+                        crops.append(crop)
+                if crops:
+                    roi_tensor = (
+                        torch.from_numpy(np.stack(crops))
+                        .permute(0, 3, 1, 2)
+                        .float()
+                        / 255
+                    )
+                    roi_tensor = roi_tensor.to(device)
+                    region_feat = self.encoder(roi_tensor).mean(0, keepdim=True)
+                    memory.append(region_feat)
+
+            memory_t = torch.stack(memory).to(device)  # (M,B,H)
+
             ys = torch.tensor([[self.sos]], device=device)
-            for i in range(max_len):
+            for _ in range(max_len):
                 emb = self.token_emb(ys).permute(1, 0, 2) + self.pos[: ys.size(1)].unsqueeze(1)
-                out = self.decoder(emb, memory)
+                out = self.decoder(emb, memory_t)
                 prob = self.fc_out(out[-1])
                 next_tok = prob.argmax(dim=-1)
                 ys = torch.cat([ys, next_tok.unsqueeze(0)], dim=1)
                 if next_tok.item() == self.eos:
                     break
+
             tokens = [self.vocab.get(t.item(), "?") for t in ys[0, 1:]]
             return " ".join(tokens)
 else:
