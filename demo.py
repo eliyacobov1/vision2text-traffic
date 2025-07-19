@@ -39,6 +39,7 @@ def run_demo(args: argparse.Namespace) -> None:
         flamingo=args.flamingo,
         simple=args.mode == "simple",
         scratch=args.mode == "scratch",
+        scene=getattr(args, "scene", True),
     )
 
     total = None
@@ -79,4 +80,5 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="cpu", help="Computation device")
     parser.add_argument("--caption", action="store_true", help="Enable caption generation")
     parser.add_argument("--flamingo", action="store_true", help="Use Flamingo-inspired mode")
+    parser.add_argument("--scene", action="store_true", help="Enable unified scene model")
     run_demo(parser.parse_args())

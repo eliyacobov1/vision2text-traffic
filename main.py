@@ -11,6 +11,7 @@ from detector.cnn_detector import CNNDetector
 from analyzer.congestion_detector import CongestionDetector
 from traffic_utils.video import create_writer
 from flamingo.vision_text_model import FlamingoVisionTextModel
+from scene.scene_model import SceneUnderstandingModel
 
 try:
     from captioner.generate_caption import CaptionGenerator
@@ -48,6 +49,12 @@ def main(args: argparse.Namespace, progress=None) -> None:
             CaptionGenerator() if args.caption and CaptionGenerator else None
         )
 
+    scene_model = (
+        SceneUnderstandingModel(detector, captioner)
+        if getattr(args, "scene", False)
+        else None
+    )
+
     congestion = CongestionDetector()
     flamingo = (
         FlamingoVisionTextModel(detector, captioner)
@@ -68,7 +75,11 @@ def main(args: argparse.Namespace, progress=None) -> None:
         if not ret:
             break
 
-        if flamingo:
+        if scene_model:
+            result = scene_model.understand(frame)
+            detections = result["detections"]
+            caption = result["caption"]
+        elif flamingo:
             detections, caption = flamingo.process(frame)
         else:
             detections = detector.detect(frame)
@@ -116,5 +127,10 @@ if __name__ == "__main__":
         "--scratch",
         action="store_true",
         help="Use deep models implemented from scratch",
+    )
+    parser.add_argument(
+        "--scene",
+        action="store_true",
+        help="Use unified scene understanding model",
     )
     main(parser.parse_args())

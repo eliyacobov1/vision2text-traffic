@@ -29,6 +29,7 @@ python main.py --input path/to/video.mp4 --output annotated.mp4 --log log.txt --
 ```
 
 Add `--caption` to enable caption generation (requires additional model download).
+For a unified approach that analyses the full scene before captioning, pass `--scene`.
 
 The script outputs an annotated video, a log of congestion status for each frame, and optional captions overlayed on the frames.
 
@@ -44,7 +45,7 @@ modes are available:
 
 ```bash
 # full pipeline with captions and Flamingo temporal context
-python demo.py --mode full --caption --flamingo
+python demo.py --mode full --caption --flamingo --scene
 
 # lightweight demo that avoids heavy model downloads
 python demo.py --mode simple
@@ -61,7 +62,9 @@ frames are first processed by an object detector (YOLO or custom CNN) to locate
 vehicles. The `CongestionDetector` then analyses object trajectories using a
 Kalman filter and optical flow to estimate speed and density. Finally, a
 vision-language model summarises the scene in natural language, enabling
-high-level insights about traffic conditions.
+high-level insights about traffic conditions. For a more integrated approach,
+the `SceneUnderstandingModel` can be enabled with `--scene` to combine detection
+and captioning in one step.
 
 ## Flamingo-Inspired Mode
 
@@ -81,5 +84,6 @@ Several captioning modules are included to explore different styles of vision‑
 - **CaptionGenerator** – wraps a pretrained ViT‑GPT2 model from Hugging Face for quick, high quality captions.
 - **VisionLanguageModel** – a tiny transformer implementation written from scratch. Its `generate` method can optionally take detection bounding boxes to fuse object-centric features with global context.
 - **FlamingoVisionTextModel** – aggregates a temporal window of frames before captioning to mimic the Flamingo architecture.
+- **SceneUnderstandingModel** – combines detection and captioning in one step to summarise the whole scene.
 
 These modules highlight the repository’s focus on combining visual understanding with textual descriptions.
