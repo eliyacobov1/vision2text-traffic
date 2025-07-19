@@ -1,6 +1,6 @@
 # Vision2Text Traffic
 
-A modular system for detecting and analyzing traffic congestion in video footage and optionally generating natural-language descriptions.
+A showcase of **vision‑language models** for traffic analysis. The system detects and tracks vehicles, then uses a captioning model to describe the scene in natural language. This bridges traditional computer vision with text generation.
 
 ## Installation
 
@@ -73,3 +73,13 @@ helps the captioner describe evolving scenes.
 ```bash
 python main.py --input path/to/video.mp4 --output annotated.mp4 --log log.txt --flamingo --caption
 ```
+
+## Vision-Language Components
+
+Several captioning modules are included to explore different styles of vision‑language modelling:
+
+- **CaptionGenerator** – wraps a pretrained ViT‑GPT2 model from Hugging Face for quick, high quality captions.
+- **VisionLanguageModel** – a tiny transformer implementation written from scratch. Its `generate` method can optionally take detection bounding boxes to fuse object-centric features with global context.
+- **FlamingoVisionTextModel** – aggregates a temporal window of frames before captioning to mimic the Flamingo architecture.
+
+These modules highlight the repository’s focus on combining visual understanding with textual descriptions.
