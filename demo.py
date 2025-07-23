@@ -34,12 +34,9 @@ def run_demo(args: argparse.Namespace) -> None:
         output=args.output,
         log=args.log,
         model="yolov5s.pt",
+        caption_model=args.caption_model,
         device=args.device,
-        caption=args.caption,
-        flamingo=args.flamingo,
-        simple=args.mode == "simple",
-        scratch=args.mode == "scratch",
-        scene=getattr(args, "scene", True),
+        no_caption=not args.caption,
     )
 
     total = None
@@ -68,17 +65,15 @@ def run_demo(args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Vision2Text demo")
-    parser.add_argument(
-        "--mode",
-        choices=["full", "simple", "scratch"],
-        default="full",
-        help="Pipeline configuration",
-    )
+    # Single pipeline demonstration; custom models can be supplied via options.
     parser.add_argument("--video", help="Optional path to input video")
     parser.add_argument("--output", default="demo_output.mp4", help="Output video path")
     parser.add_argument("--log", default="demo_log.txt", help="Log file path")
     parser.add_argument("--device", default="cpu", help="Computation device")
-    parser.add_argument("--caption", action="store_true", help="Enable caption generation")
-    parser.add_argument("--flamingo", action="store_true", help="Use Flamingo-inspired mode")
-    parser.add_argument("--scene", action="store_true", help="Enable unified scene model")
+    parser.add_argument("--caption", action="store_true", help="Generate captions")
+    parser.add_argument(
+        "--caption-model",
+        default="",
+        help="Path to a fine-tuned CLIP model",
+    )
     run_demo(parser.parse_args())

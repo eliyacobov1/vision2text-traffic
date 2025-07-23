@@ -25,16 +25,22 @@ def test_main_pipeline(tmp_path, monkeypatch):
             return "dummy"
 
     monkeypatch.setattr(main, 'YOLODetector', DummyDetector)
-    monkeypatch.setattr(main, 'CaptionGenerator', lambda: DummyCaption())
+    monkeypatch.setattr(main, 'CaptionGenerator', lambda *a, **k: DummyCaption())
+    import detector.yolo_detector
+    import captioner.generate_caption
+    monkeypatch.setattr(detector.yolo_detector, 'YOLODetector', DummyDetector)
+    monkeypatch.setattr(captioner.generate_caption, 'CaptionGenerator', lambda *a, **k: DummyCaption())
 
     args = argparse.Namespace(
         input=str(input_video),
         output=str(out_video),
         log=str(log_file),
         model='fake.pt',
+        caption_model='nlpconnect/vit-gpt2-image-captioning',
         device='cpu',
         caption=True,
-        simple=False,
+        flamingo=False,
+        scene=False,
     )
 
     main.main(args)

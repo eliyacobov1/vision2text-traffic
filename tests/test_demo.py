@@ -23,7 +23,7 @@ def test_run_demo(tmp_path, monkeypatch):
         device="cpu",
         caption=False,
         flamingo=False,
-        mode="simple",
+        caption_model="nlpconnect/vit-gpt2-image-captioning",
     )
     demo.run_demo(args)
     assert out.exists()
