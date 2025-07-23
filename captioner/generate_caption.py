@@ -4,7 +4,11 @@ from typing import Optional
 
 import cv2
 from PIL import Image
-from transformers import pipeline
+try:
+    from transformers import pipeline
+except Exception:  # pragma: no cover - transformers optional
+    pipeline = None
+    from .clip_captioner import CLIPCaptioner as CaptionGenerator  # fallback
 
 
 class CaptionGenerator:
@@ -17,7 +21,12 @@ class CaptionGenerator:
             model: Model name or path for the HuggingFace image-to-text pipeline.
             device: Device index (``-1`` for CPU).
         """
-        self.pipe = pipeline("image-to-text", model=model, device=device)
+        if pipeline is None:
+            from .clip_captioner import CLIPCaptioner
+            self.impl = CLIPCaptioner(model_path=model, device="cpu")
+        else:
+            self.impl = None
+            self.pipe = pipeline("image-to-text", model=model, device=device)
 
     def caption(self, frame) -> str:
         """Generate caption for a frame.
@@ -28,6 +37,8 @@ class CaptionGenerator:
         Returns:
             Generated caption string.
         """
+        if self.impl is not None:
+            return self.impl.caption(frame)
         image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         result = self.pipe(image)[0]
         return result["generated_text"].strip()
