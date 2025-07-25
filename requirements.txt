@@ -6,3 +6,7 @@ scikit-learn
 pillow
 numpy
 requests
+timm
+pyyaml
+matplotlib
+pytest

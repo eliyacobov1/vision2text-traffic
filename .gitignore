@@ -1,5 +1,7 @@
 __pycache__/
 checkpoints/
+logs/
+eval_outputs/
 *.pyc
 .env
 .env*/
