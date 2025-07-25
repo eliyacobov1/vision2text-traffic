@@ -1,99 +1,49 @@
-# Vision2Text Traffic
+# Vision-Language Traffic Congestion Detector
 
-A showcase of **vision‑language models** for traffic analysis. The system detects
-and tracks vehicles, then uses a captioning model to describe the scene in
-natural language. This single pipeline demonstrates how vision and language can
-be combined for rich traffic understanding.
+This repository demonstrates a small **vision‑language transformer** for detecting road congestion. A vision‑language model processes an image together with a text prompt so that both modalities influence the prediction.
+
+## Architecture
+```
+[Image]  --Vision Encoder-->  image features --+
+[Prompt] --Text Encoder-->   text features  --+-->
+                     Cross‑Attention
+                           ↓
+                     Classifier → congestion score
+```
+- **Vision encoder**: ResNet backbone from `torchvision` (frozen)
+- **Text encoder**: HuggingFace transformer (frozen)
+- **Fusion**: project both features to a shared space and apply a cross‑attention layer
 
 ## Installation
-
-Create a Python environment and install dependencies:
-
 ```bash
 pip install -r requirements.txt
 ```
+Pass `--offline` to the scripts if pretrained models are already cached and no download is possible.
 
-The detector uses YOLOv5 weights (`yolov5s.pt` by default). If not present
-locally, the weights will be downloaded automatically using `torch.hub`.
-
-## Usage
-
-Run the main pipeline on a video file:
-
+## Training
+Prepare a `dataset.csv` file with columns `image_url`, `text`, and `label`. The sample_data directory provides an example with online image links.
 ```bash
-python main.py --input path/to/video.mp4 --output annotated.mp4 --log log.txt
+python train.py --data-dir sample_data --out-dir checkpoints --epochs 1
 ```
+A checkpoint `model.pt` and `model_last.pt` will be written to the output directory.
 
-The script performs YOLOv5 detection, aggregates recent frames with a
-Flamingo-style module and generates a caption for each frame using a CLIP based
-model. The result is an annotated video and a log of congestion status.
-
-All configuration options are collected in a `PipelineConfig` dataclass so they
-can easily be modified or extended in code.
-
-To experiment with your own models, provide custom weights:
-
+## Evaluation
 ```bash
-python main.py --input video.mp4 --model my_yolov5.pt \
-    --caption-model /path/to/my_clip_weights
+python evaluate.py --data-dir sample_data --ckpt checkpoints/model.pt
 ```
+This prints precision, recall, F1 and AUC metrics together with a few example predictions.
 
-Use `--no-caption` to disable caption generation if needed (e.g. for testing).
-
-The script outputs an annotated video, a log of congestion status for each frame, and optional captions overlayed on the frames.
-
-## Quick Demo
-
-Run a self-contained demonstration using a short sample video. The script
-downloads the clip automatically and executes the end‑to‑end pipeline:
-
+## Demo
+Launch a simple Streamlit interface:
 ```bash
-python demo.py --caption
+./run_demo.sh
 ```
+Upload an image and enter a prompt such as "How congested is this road?" to get the predicted probability.
 
-After processing, the script reports how many frames were marked as congested and
-the location of the generated video and log file.
-
-## Architecture Overview
-
-The processing logic lives in `VisionLanguagePipeline`, a class that wires
-the detector, congestion analysis and caption generator together. Each module
-follows a small interface, allowing you to swap in alternative detectors or
-captioners with minimal code changes. Pipeline parameters are defined in
-`PipelineConfig`, which can be extended for research experiments.
-
-
-## Architecture Overview
-
-Frames are processed by a YOLO detector to locate vehicles. Detected objects
-feed into `FlamingoVisionTextModel`, which keeps a short history of frames and
-aggregates them so the captioner sees temporal context. A CLIP-based captioner
-then produces a brief description of the scene. Congestion is estimated from the
-detection tracks and logged alongside the captions.
-
-## Vision-Language Components
-
-The pipeline is built from modular components:
-
-- **YOLODetector** – fast object detector for locating vehicles.
-- **CongestionDetector** – analyses tracked positions to estimate traffic flow.
-- **CLIPCaptioner** – CLIP-style captioner producing short textual summaries.
-- **FlamingoVisionTextModel** – maintains a context window of frames for the captioner.
-
-These pieces can be replaced with your own models by supplying different weight files.
-
-## Advanced Model Customisation
-
-`main.py` accepts custom paths for both detection and captioning models. This allows you to drop in your own YOLO variants or CLIP weights without code changes. When selecting models consider the trade‑off between accuracy and runtime.
-
-To experiment with your own models:
-
-```bash
-python main.py --input video.mp4 --model my_yolov5.pt \
-    --caption-model ./my_clip_weights
+## Sample Data
+The repository includes a minimal `dataset.csv` with three examples referencing images hosted online. Example output:
 ```
-
-The pipeline will automatically load the specified weights and integrate them into the detection‑tracking‑captioning loop.
-For full control you can implement the minimal `Detector` or `Captioner`
-protocols defined in the `pipeline` package and pass your objects directly to
-`VisionLanguagePipeline`.
+Input URL: https://i.imgur.com/ExdKOOz.png
+Prompt: "heavy traffic"
+Prediction: 0.75 (75% congestion)
+```
