@@ -1,79 +1,39 @@
-import argparse
-import os
-import tempfile
-import urllib.request
+import streamlit as st
+from PIL import Image
+from pathlib import Path
+import torch
+from model import VisionLanguageTransformer, VLTConfig, SimpleTokenizer
+from utils import get_transforms
+from transformers import AutoTokenizer
 
-import main
-import cv2
 
+def load_model(ckpt: str, offline: bool = False):
+    config = VLTConfig()
+    model = VisionLanguageTransformer(config)
+    if Path(ckpt).exists():
+        model.load_state_dict(torch.load(ckpt, map_location='cpu'))
+    model.eval()
+    return model
+
+
+st.title('Traffic Congestion Detector')
+ckpt = st.sidebar.text_input('Checkpoint path', 'checkpoints/model.pt')
+offline = st.sidebar.checkbox('Offline mode', value=False)
+model = load_model(ckpt, offline=offline)
 try:
-    from tqdm import tqdm
-except Exception:  # pragma: no cover - optional progress bar
-    tqdm = None
+    tokenizer = AutoTokenizer.from_pretrained(model.config.text_model, local_files_only=offline)
+except Exception:
+    tokenizer = SimpleTokenizer()
+transform = get_transforms()
 
-SAMPLE_URL = (
-    "https://raw.githubusercontent.com/opencv/opencv/master/samples/data/Megamind.avi"
-)
+uploaded = st.file_uploader('Upload an image')
+text = st.text_input('Describe the traffic level in this scene.')
 
-
-def download_sample(path: str) -> str:
-    if not os.path.exists(path):
-        print("Downloading sample video...")
-        urllib.request.urlretrieve(SAMPLE_URL, path)
-    return path
-
-
-def run_demo(args: argparse.Namespace) -> None:
-    if args.video is None:
-        tmp_dir = tempfile.gettempdir()
-        args.video = os.path.join(tmp_dir, "sample.avi")
-        download_sample(args.video)
-
-    main_args = argparse.Namespace(
-        input=args.video,
-        output=args.output,
-        log=args.log,
-        model="yolov5s.pt",
-        caption_model=args.caption_model,
-        device=args.device,
-        no_caption=not args.caption,
-    )
-
-    total = None
-    if tqdm and os.path.exists(args.video):
-        cap = cv2.VideoCapture(args.video)
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or None
-        cap.release()
-
-    if tqdm and total:
-        print("Processing video...")
-        with tqdm(total=total) as pbar:
-            def progress_callback():
-                pbar.update(1)
-
-            main.main(main_args, progress=progress_callback)  # type: ignore[arg-type]
-    else:
-        main.main(main_args)
-
-    print(f"Demo complete. Output saved to {args.output}")
-
-    if os.path.exists(args.log):
-        lines = open(args.log).read().splitlines()
-        congested = sum("Congested" in l for l in lines)
-        print(f"Frames processed: {len(lines)}  Congested frames: {congested}")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Vision2Text demo")
-    # Single pipeline demonstration; custom models can be supplied via options.
-    parser.add_argument("--video", help="Optional path to input video")
-    parser.add_argument("--output", default="demo_output.mp4", help="Output video path")
-    parser.add_argument("--log", default="demo_log.txt", help="Log file path")
-    parser.add_argument("--device", default="cpu", help="Computation device")
-    parser.add_argument("--caption", action="store_true", help="Generate captions")
-    parser.add_argument(
-        "--caption-model",
-        default="",
-        help="Path to a fine-tuned CLIP model",
-    )
-    run_demo(parser.parse_args())
+if uploaded and text:
+    image = Image.open(uploaded).convert('RGB')
+    st.image(image, caption='Input Image')
+    img_tensor = transform(image).unsqueeze(0)
+    tokens = tokenizer(text, return_tensors='pt', padding=True)
+    with torch.no_grad():
+        pred = model(img_tensor, tokens['input_ids'], tokens['attention_mask'])
+    st.write(f'Congestion probability: {pred.item():.3f}')
