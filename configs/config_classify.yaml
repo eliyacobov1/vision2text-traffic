@@ -1,0 +1,16 @@
+model:
+  vision_model: vit_base_patch16_224
+  text_model: distilbert-base-uncased
+  hidden_dim: 256
+  num_heads: 8
+  num_layers: 2
+  contrastive: false
+  loss_type: classification
+training:
+  lr: 1e-4
+  batch_size: 4
+  epochs: 5
+  early_stop_patience: 3
+  amp: true
+  checkpoint_dir: checkpoints
+  experiment_tag: classify
