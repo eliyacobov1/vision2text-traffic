@@ -79,3 +79,21 @@ Input URL: https://i.imgur.com/ExdKOOz.png
 Prompt: "heavy traffic"
 Prediction: 0.75 (75% congestion)
 ```
+
+## How to Extend This Project
+- **New tasks**: Implement a custom head in `heads.py` and list it in `model.heads` in your config. Examples include captioning or VQA.
+- **Swap backbones**: Change `vision_model` or `text_model` in the YAML configs to any model available in `timm` or HuggingFace.
+- **Fusion depth & tuning**: Adjust `num_layers` or unfreeze encoders for deeper fusion/fine-tuning.
+- **Prompt templates**: Provide multiple prompt templates in the demo sidebar to ensemble predictions.
+
+```
+[Image] -> ViT -> patches
+[Prompt] -> Text Encoder -> tokens
+                |
+          Cross Attention x N
+                |
+              Heads
+```
+
+The system aids **autonomous driving**, intelligent transportation systems and **urban planning** by connecting visual cues with contextual language for accurate congestion understanding.
+

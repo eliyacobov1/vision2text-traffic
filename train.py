@@ -2,6 +2,7 @@ import argparse
 import logging
 from pathlib import Path
 import yaml
+from datetime import datetime
 
 import torch
 from torch.utils.data import DataLoader
@@ -27,6 +28,14 @@ def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     config, train_cfg, data_cfg = load_config(args.config)
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tag = train_cfg.get("experiment_tag", "default")
+    run_dir = Path("runs") / tag / run_id
+    ckpt_dir = run_dir / "checkpoints"
+    log_dir = run_dir / "logs"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
     model = VisionLanguageTransformer(config, offline=args.offline).to(device)
 
     dataset = TrafficDataset(data_cfg.get("root", args.data_dir), config.text_model, offline=args.offline)
@@ -38,6 +47,7 @@ def train(args):
     patience = train_cfg.get("early_stop_patience", 3)
     best_f1 = 0.0
     patience_ctr = 0
+    history = []
 
     logging.info("Starting training for %d epochs", train_cfg.get("epochs", args.epochs))
     for epoch in range(train_cfg.get("epochs", args.epochs)):
@@ -53,7 +63,7 @@ def train(args):
 
             with autocast(enabled=train_cfg.get("amp", False)):
                 out = model(images, input_ids, attention_mask)
-                preds = out[0] if isinstance(out, tuple) else out
+                preds = out["classification"] if isinstance(out, dict) else out
                 loss = binary_cross_entropy(preds, labels)
 
             optimizer.zero_grad()
@@ -67,13 +77,13 @@ def train(args):
 
         avg_loss = total_loss / len(dataset)
         f1 = f1_score(torch.tensor(all_labels), torch.tensor(all_preds) > 0.5)
+        history.append({"epoch": epoch + 1, "loss": avg_loss, "f1": float(f1)})
         logging.info("Epoch %d: loss=%.4f f1=%.4f", epoch + 1, avg_loss, f1)
 
         if f1 > best_f1:
             best_f1 = f1
             patience_ctr = 0
-            Path(train_cfg.get("checkpoint_dir", args.out_dir)).mkdir(parents=True, exist_ok=True)
-            ckpt = Path(train_cfg.get("checkpoint_dir", args.out_dir)) / "model.pt"
+            ckpt = ckpt_dir / "model.pt"
             torch.save(model.state_dict(), ckpt)
             logging.info("Saved checkpoint to %s", ckpt)
         else:
@@ -82,10 +92,33 @@ def train(args):
                 logging.info("Early stopping")
                 break
 
-    Path(train_cfg.get("checkpoint_dir", args.out_dir)).mkdir(parents=True, exist_ok=True)
-    ckpt = Path(train_cfg.get("checkpoint_dir", args.out_dir)) / "model_last.pt"
+    ckpt = ckpt_dir / "model_last.pt"
     torch.save(model.state_dict(), ckpt)
     logging.info("Final checkpoint saved to %s", ckpt)
+
+    # save metrics
+    import json
+    metrics_path = run_dir / "metrics.json"
+    with metrics_path.open("w") as f:
+        json.dump({"history": history}, f, indent=2)
+
+    import pandas as pd
+    df = pd.DataFrame(history)
+    df.to_csv(run_dir / "metrics.csv", index=False)
+
+    # plot loss/f1 curves
+    import matplotlib.pyplot as plt
+    epochs = [h["epoch"] for h in history]
+    losses = [h["loss"] for h in history]
+    f1s = [h["f1"] for h in history]
+    plt.figure()
+    plt.plot(epochs, losses, label="loss")
+    plt.plot(epochs, f1s, label="f1")
+    plt.xlabel("Epoch")
+    plt.legend()
+    plt.title("Training curves")
+    plt.savefig(run_dir / "train_curves.png")
+    plt.close()
 
 
 def parse_args():

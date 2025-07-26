@@ -5,6 +5,7 @@ model:
   num_heads: 8
   num_layers: 2
   contrastive: false
+  heads: ["classification"]
   loss_type: classification
 training:
   lr: 1e-4
