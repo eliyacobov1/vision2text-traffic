@@ -1,3 +1,4 @@
+import sys, os; sys.path.append(os.getcwd())
 import torch
 from model import VisionLanguageTransformer, VLTConfig
 

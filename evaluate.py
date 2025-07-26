@@ -1,10 +1,18 @@
 import argparse
 import logging
 from pathlib import Path
+from datetime import datetime
 import yaml
+import json
 import torch
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_fscore_support, roc_auc_score, roc_curve, precision_recall_curve, confusion_matrix
+from sklearn.metrics import (
+    precision_recall_fscore_support,
+    roc_auc_score,
+    roc_curve,
+    precision_recall_curve,
+    confusion_matrix,
+)
 from torch.utils.data import DataLoader
 
 from model import VisionLanguageTransformer, VLTConfig
@@ -39,7 +47,8 @@ def evaluate(args):
             input_ids = input_ids.to(device)
             attention_mask = attention_mask.to(device)
             outputs = model(images, input_ids, attention_mask)
-            preds.extend(outputs.cpu().tolist())
+            pred = outputs["classification"] if isinstance(outputs, dict) else outputs
+            preds.extend(pred.cpu().tolist())
             labels.extend(lbls.tolist())
 
     preds_tensor = torch.tensor(preds)
@@ -48,15 +57,16 @@ def evaluate(args):
     auc = roc_auc_score(labels_tensor, preds_tensor)
     logging.info("Precision: %.4f Recall: %.4f F1: %.4f AUC: %.4f", precision, recall, f1, auc)
 
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = Path(args.out_dir) / datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir.mkdir(parents=True, exist_ok=True)
+
     fpr, tpr, _ = roc_curve(labels_tensor, preds_tensor)
     plt.figure()
     plt.plot(fpr, tpr)
     plt.xlabel("FPR")
     plt.ylabel("TPR")
     plt.title("ROC")
-    plt.savefig(out_dir / "roc.png")
+    plt.savefig(run_dir / "roc.png")
     plt.close()
 
     prec, rec, _ = precision_recall_curve(labels_tensor, preds_tensor)
@@ -65,21 +75,29 @@ def evaluate(args):
     plt.xlabel("Recall")
     plt.ylabel("Precision")
     plt.title("PR Curve")
-    plt.savefig(out_dir / "pr_curve.png")
+    plt.savefig(run_dir / "pr_curve.png")
     plt.close()
 
     cm = confusion_matrix(labels_tensor, preds_tensor > 0.5)
     plt.figure()
     plt.imshow(cm, cmap="Blues")
     plt.title("Confusion Matrix")
-    plt.savefig(out_dir / "confusion_matrix.png")
+    plt.savefig(run_dir / "confusion_matrix.png")
     plt.close()
 
-    for i in range(min(5, len(dataset))):
-        img_src, text, label = dataset.samples[i]
-        logging.info("Image: %s | Text: %s | Label: %s | Pred: %.3f", img_src, text, label, preds[i])
+    metrics = {
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1": float(f1),
+        "auc": float(auc),
+    }
+    with (run_dir / "metrics.json").open("w") as f:
+        json.dump(metrics, f, indent=2)
 
-    logging.info("Evaluation complete. Plots saved to %s", out_dir)
+    import pandas as pd
+    pd.DataFrame({"pred": preds, "label": labels}).to_csv(run_dir / "predictions.csv", index=False)
+
+    logging.info("Evaluation complete. Outputs saved to %s", run_dir)
 
 
 def parse_args():

@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from PIL import Image
 from transformers import AutoTokenizer
-from model import SimpleTokenizer
+from encoders import SimpleTokenizer
 
 
 def get_transforms(image_size: int = 224):
