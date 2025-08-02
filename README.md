@@ -49,11 +49,25 @@ python main.py eval --config configs/config_classify.yaml --ckpt checkpoints/mod
 The script reports precision, recall, F1 and AUC and saves ROC, PR and confusion matrix plots to `eval_outputs/`.
 
 ## Demo
-Launch a simple Streamlit interface:
+An interactive Streamlit interface showcases the full model.
+
+### Launching the demo
+Use the provided script which sets sensible defaults and checks that paths exist:
 ```bash
-python main.py demo --ckpt checkpoints/model.pt
+./run_demo.sh --ckpt checkpoints/model.pt --config config.yaml
 ```
-This command now starts Streamlit automatically. Upload an image and enter a prompt such as "How congested is this road?" to get the predicted probability.
+Both flags are optional; missing files trigger a warning and built‑in defaults are used.
+
+### Features
+- Upload an image **or** choose one from the sample gallery.
+- Enter a custom prompt and optionally multiple prompt templates.
+- Toggle between **classification** and **contrastive** heads.
+- View congestion probability with a confidence bar and raw logit.
+- Inspect cross‑attention heatmaps overlaid on the image.
+- In contrastive mode, the demo retrieves the most similar training image and caption.
+- Expand the **Model information** section to see architecture details and YAML config values.
+
+Query history is stored in `logs/demo_queries.log` for experimentation.
 
 ## Technical summary
 | Component | Details |
