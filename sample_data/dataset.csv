@@ -1,4 +1,4 @@
-image_url,text,label
-https://i.imgur.com/ExdKOOz.png,"heavy traffic",1
-https://i.imgur.com/oaJKGqe.jpeg,"traffic jam",1
-https://i.imgur.com/tEcAE1I.jpeg,"clear road",0
+image,text,label
+https://picsum.photos/seed/heavy-traffic/640/480,"heavy traffic",1
+https://picsum.photos/seed/traffic-jam/640/480,"traffic jam",1
+https://picsum.photos/seed/clear-road/640/480,"clear road",0

@@ -51,9 +51,9 @@ The script reports precision, recall, F1 and AUC and saves ROC, PR and confusion
 ## Demo
 Launch a simple Streamlit interface:
 ```bash
-python main.py demo --config configs/config_classify.yaml --ckpt checkpoints/model.pt
+python main.py demo --ckpt checkpoints/model.pt
 ```
-Upload an image and enter a prompt such as "How congested is this road?" to get the predicted probability.
+This command now starts Streamlit automatically. Upload an image and enter a prompt such as "How congested is this road?" to get the predicted probability.
 
 ## Technical summary
 | Component | Details |
@@ -73,11 +73,11 @@ Upload an image and enter a prompt such as "How congested is this road?" to get 
 | AUC (test) | 0.86 |
 
 ## Sample Data
-The repository includes a minimal `dataset.csv` with three examples referencing images hosted online. Example output:
+The repository includes a `sample_data/dataset.csv` that references three remote images by URL. Example entry:
 ```
-Input URL: https://i.imgur.com/ExdKOOz.png
-Prompt: "heavy traffic"
-Prediction: 0.75 (75% congestion)
+image: https://picsum.photos/seed/heavy-traffic/640/480
+text: "heavy traffic"
+label: 1
 ```
 
 ## How to Extend This Project

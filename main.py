@@ -1,11 +1,11 @@
 import argparse
 import logging
 from pathlib import Path
+import subprocess
 import yaml
 
 from train import train
 from evaluate import evaluate
-from demo import run_app
 
 
 def setup_logging(mode: str, log_dir: str = "logs"):
@@ -44,7 +44,19 @@ def main():
     elif args.mode == "eval":
         evaluate(args)
     else:
-        run_app(args)
+        cmd = [
+            "streamlit",
+            "run",
+            str(Path(__file__).parent / "demo.py"),
+            "--",
+            "--ckpt",
+            args.ckpt,
+            "--data-dir",
+            args.data_dir,
+        ]
+        if args.offline:
+            cmd.append("--offline")
+        subprocess.run(cmd, check=True)
 
 
 if __name__ == "__main__":

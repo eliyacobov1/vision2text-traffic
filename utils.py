@@ -46,6 +46,8 @@ class TrafficDataset(Dataset):
                     url = row.get("image_url") or row.get("image")
                     text = row.get("text", "")
                     label = int(row.get("label", 0))
+                    if url and not str(url).startswith("http"):
+                        url = (self.root / url).as_posix()
                     self.samples.append((url, text, label))
         else:
             for img in sorted((self.root / "images").glob("*.jpg")):
