@@ -1,14 +1,19 @@
+"""Streamlit demo showcasing the vision-language congestion model."""
+
 import argparse
 import logging
+from io import BytesIO
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
-import streamlit as st
-from PIL import Image
 import numpy as np
+import matplotlib.pyplot as plt
+import streamlit as st
 import torch
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
+import yaml
+from PIL import Image
+import requests
 
 from model import VisionLanguageTransformer, VLTConfig
 from encoders import SimpleTokenizer
@@ -16,13 +21,59 @@ from utils import get_transforms, TrafficDataset
 from transformers import AutoTokenizer
 
 
-def load_model(ckpt: str, offline: bool = False) -> VisionLanguageTransformer:
+# -----------------------------------------------------------------------------
+# Loading utilities
+
+
+def load_config(cfg_path: str | None) -> Tuple[VLTConfig, dict]:
+    """Load YAML config if present and return the dataclass and raw dict."""
+
+    cfg_dict: dict = {}
     config = VLTConfig()
+    if cfg_path and Path(cfg_path).exists():
+        with open(cfg_path, "r") as f:
+            cfg_dict = yaml.safe_load(f) or {}
+        config = VLTConfig(**cfg_dict.get("model", {}))
+    return config, cfg_dict
+
+
+def load_model(ckpt: str | None, cfg_path: str | None, offline: bool = False) -> tuple[VisionLanguageTransformer, dict]:
+    """Instantiate model from checkpoint and config with graceful fallbacks."""
+
+    config, cfg_dict = load_config(cfg_path)
     model = VisionLanguageTransformer(config, offline=offline)
-    if Path(ckpt).exists():
-        model.load_state_dict(torch.load(ckpt, map_location="cpu"))
+    if ckpt and Path(ckpt).exists():
+        state = torch.load(ckpt, map_location="cpu")
+        model.load_state_dict(state, strict=False)
+    else:
+        logging.warning("Checkpoint %s not found; using randomly initialised weights", ckpt)
     model.eval()
-    return model
+    return model, cfg_dict
+
+
+# -----------------------------------------------------------------------------
+# Dataset encoding helpers
+
+
+def encode_dataset_images(model: VisionLanguageTransformer, dataset: TrafficDataset) -> torch.Tensor:
+    """Encode dataset images for similarity search."""
+
+    loader = torch.utils.data.DataLoader(dataset, batch_size=4)
+    img_embs: List[torch.Tensor] = []
+    with torch.no_grad():
+        for imgs, _, _, _ in loader:
+            img_tokens = model.img_proj(model.vision(imgs))
+            if "contrastive" in model.heads:
+                head = model.heads["contrastive"]
+                emb = F.normalize(head.img_proj(img_tokens.mean(dim=1)), dim=-1)
+            else:
+                emb = img_tokens.mean(dim=1)
+            img_embs.append(emb)
+    return torch.cat(img_embs) if img_embs else torch.empty(0, model.config.hidden_dim)
+
+
+# -----------------------------------------------------------------------------
+# Misc helpers
 
 
 def log_query(text: str, mode: str, log_file: Path):
@@ -30,30 +81,93 @@ def log_query(text: str, mode: str, log_file: Path):
         f.write(f"{mode}\t{text}\n")
 
 
-def encode_dataset_texts(model: VisionLanguageTransformer, dataset: TrafficDataset) -> torch.Tensor:
-    texts = [t for _, t, _ in dataset.samples]
-    ids, masks = model.encode_text(texts)
-    with torch.no_grad():
-        txt_tokens = model.txt_proj(model.text(ids, masks))
-        cls = txt_tokens[:, 0, :]
-        if "contrastive" in model.heads:
-            head = model.heads["contrastive"]
-            txt_emb = torch.nn.functional.normalize(head.txt_proj(cls), dim=-1)
-        else:
-            txt_emb = cls
-    return txt_emb
+def validate_image(uploaded) -> Optional[Image.Image]:
+    """Ensure uploaded file is an image and not overly large."""
+
+    if uploaded.type not in {"image/jpeg", "image/png", "image/jpg"}:
+        st.error("Only JPEG or PNG images are supported")
+        return None
+    if uploaded.size and uploaded.size > 5 * 1024 * 1024:
+        st.error("Image file too large (>5MB)")
+        return None
+    try:
+        return Image.open(uploaded).convert("RGB")
+    except Exception:
+        st.error("Invalid image file")
+        return None
+
+
+def compute_heatmap(attn: torch.Tensor, image: Image.Image):
+    """Convert attention tensor to a matplotlib figure overlay."""
+
+    attn_map = attn[0].mean(0)[0]
+    grid = int(len(attn_map) ** 0.5)
+    heat = attn_map.reshape(grid, grid).cpu().numpy()
+    heat = (heat - heat.min()) / (heat.max() - heat.min() + 1e-6)
+    heat = np.kron(heat, np.ones((image.size[1] // grid, image.size[0] // grid)))
+    fig, ax = plt.subplots()
+    ax.imshow(image)
+    ax.imshow(heat, cmap="jet", alpha=0.5, extent=(0, image.size[0], image.size[1], 0))
+    ax.axis("off")
+    return fig
+
+
+def is_frozen(module: torch.nn.Module) -> bool:
+    return not any(p.requires_grad for p in module.parameters())
+
+
+def show_model_info(model: VisionLanguageTransformer, cfg_dict: dict):
+    """Display model architecture summary and config."""
+
+    with st.expander("Model information", expanded=False):
+        st.write(
+            f"Vision encoder: {model.config.vision_model} "
+            f"({'frozen' if is_frozen(model.vision) else 'trainable'})"
+        )
+        st.write(
+            f"Text encoder: {model.config.text_model} "
+            f"({'frozen' if is_frozen(model.text) else 'trainable'})"
+        )
+        st.write(f"Cross-attention layers: {model.config.num_layers}")
+        st.write(f"Hidden dimension: {model.config.hidden_dim}")
+        total = sum(p.numel() for p in model.parameters())
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        st.write(f"Parameters: {total:,} (trainable {trainable:,})")
+        if cfg_dict:
+            st.write("YAML config values:")
+            st.json(cfg_dict)
+
+
+# -----------------------------------------------------------------------------
+# Streamlit app
 
 
 def run_app(args: Optional[argparse.Namespace] = None):
+    st.set_page_config(page_title="Traffic Congestion Detector", layout="wide")
     st.title("Traffic Congestion Detector")
-    ckpt = st.sidebar.text_input("Checkpoint path", args.ckpt if args else "checkpoints/model.pt")
-    offline = st.sidebar.checkbox("Offline mode", value=False)
-    data_dir = st.sidebar.text_input("Data dir for retrieval", args.data_dir if args else "sample_data")
-    mode = st.sidebar.selectbox("Mode", ["classification", "contrastive"])  # choose output
-    templates_str = st.sidebar.text_area("Prompt templates (one per line)", "Describe traffic\nTraffic density:")
+    st.markdown(
+        "Upload a road image or pick a sample and query the model with a custom prompt "
+        "to assess congestion levels."
+    )
+
+    # Sidebar / advanced options
+    with st.sidebar.expander("Advanced options", expanded=False):
+        ckpt = st.text_input("Checkpoint path", args.ckpt if args else "checkpoints/model.pt")
+        config_path = st.text_input("Config path", getattr(args, "config", "config.yaml") if args else "config.yaml")
+        offline = st.checkbox("Offline mode", value=False)
+        data_dir = st.text_input("Data dir for retrieval", args.data_dir if args else "sample_data")
+
+    head = st.sidebar.radio("Model head", ["classification", "contrastive"])
+    templates_str = st.sidebar.text_area(
+        "Prompt templates (one per line)", "Describe traffic\nTraffic density:"
+    )
     templates = [t.strip() for t in templates_str.splitlines() if t.strip()]
 
-    model = load_model(ckpt, offline=offline)
+    model, cfg_dict = load_model(ckpt, config_path, offline)
+    if ckpt and not Path(ckpt).exists():
+        st.warning(f"Checkpoint '{ckpt}' not found. Using random weights.")
+    if config_path and not Path(config_path).exists():
+        st.warning(f"Config '{config_path}' not found. Using defaults.")
     try:
         tokenizer = AutoTokenizer.from_pretrained(model.config.text_model, local_files_only=offline)
     except Exception:
@@ -61,19 +175,33 @@ def run_app(args: Optional[argparse.Namespace] = None):
     transform = get_transforms()
 
     dataset = TrafficDataset(data_dir, model.config.text_model, offline=offline)
-    retrieval_embs = encode_dataset_texts(model, dataset) if mode == "contrastive" else None
-    retrieval_texts = [t for _, t, _ in dataset.samples]
+    retrieval_img_embs = encode_dataset_images(model, dataset) if head == "contrastive" else None
 
-    uploaded = st.file_uploader("Upload an image")
-    text = st.text_input("Describe the traffic level in this scene.")
+    sample_names = [f"{i}: {t}" for i, (_, t, _) in enumerate(dataset.samples)]
+    sample_choice = st.sidebar.selectbox("Sample gallery", ["None"] + sample_names)
 
-    if uploaded and text:
-        image = Image.open(uploaded).convert("RGB")
-        st.image(image, caption="Input Image")
+    uploaded = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
+    image: Optional[Image.Image] = None
+    if uploaded is not None:
+        image = validate_image(uploaded)
+    elif sample_choice != "None":
+        url, _, _ = dataset.samples[int(sample_choice.split(":")[0])]
+        try:
+            headers = {"User-Agent": "Mozilla/5.0"}
+            resp = requests.get(url, timeout=10, headers=headers)
+            image = Image.open(BytesIO(resp.content)).convert("RGB")
+        except Exception as e:  # pragma: no cover - network failure is unlikely
+            st.error(f"Failed to load sample image: {e}")
+
+    prompt = st.text_input("Enter a prompt", "Is this road congested?")
+
+    if image is not None and prompt:
+        st.image(image, caption="Input image", use_column_width=True)
         img_tensor = transform(image).unsqueeze(0)
-        prompts = [tpl.replace("{}", text) if "{}" in tpl else f"{tpl} {text}" for tpl in templates] or [text]
-        probs = []
+        prompts = [tpl.replace("{}", prompt) if "{}" in tpl else f"{tpl} {prompt}" for tpl in templates] or [prompt]
+        probs: List[float] = []
         attn = None
+        img_emb = txt_emb = None
         for p in prompts:
             tokens = tokenizer(p, return_tensors="pt", padding=True)
             with torch.no_grad():
@@ -86,36 +214,40 @@ def run_app(args: Optional[argparse.Namespace] = None):
                 prob, img_emb, txt_emb = out, None, None
             probs.append(float(prob))
         avg_prob = sum(probs) / len(probs)
-        st.write(f"Congestion probability: {avg_prob:.3f}")
+        logit = float(np.log(avg_prob / (1 - avg_prob + 1e-6)))
+        st.metric("Congestion probability", f"{avg_prob:.3f}", help=f"logit {logit:.3f}")
+        st.progress(min(max(avg_prob, 0.0), 1.0))
 
-        if mode == "contrastive" and img_emb is not None and txt_emb is not None:
-            sim = float((img_emb @ txt_emb.T).item())
-            st.write(f"Similarity score: {sim:.3f}")
-            if retrieval_embs is not None:
-                sims = (retrieval_embs @ txt_emb.T).squeeze(1)
-                topk = torch.topk(sims, min(3, len(retrieval_texts))).indices.tolist()
-                st.write("Top similar prompts:")
-                for idx in topk:
-                    st.write(f"{retrieval_texts[idx]} (score {sims[idx]:.3f})")
+        if head == "contrastive" and img_emb is not None and retrieval_img_embs is not None and len(retrieval_img_embs) > 0:
+            sims = (retrieval_img_embs @ img_emb.T).squeeze(1)
+            top_idx = int(torch.topk(sims, 1).indices[0])
+            url, caption, _ = dataset.samples[top_idx]
+            headers = {"User-Agent": "Mozilla/5.0"}
+            resp = requests.get(url, timeout=10, headers=headers)
+            top_img = Image.open(BytesIO(resp.content)).convert("RGB")
+            st.write("Top matching training image:")
+            st.image(top_img, caption=caption, use_column_width=True)
 
         if attn is not None:
-            attn_map = attn[0].mean(0)[0]
-            grid = int(len(attn_map) ** 0.5)
-            heat = attn_map.reshape(grid, grid).cpu().numpy()
-            heat = (heat - heat.min()) / (heat.max() - heat.min() + 1e-6)
-            heat = np.kron(heat, np.ones((image.size[0] // grid, image.size[1] // grid)))
-            plt.imshow(image)
-            plt.imshow(heat, cmap="jet", alpha=0.5)
-            st.pyplot(plt)
+            fig = compute_heatmap(attn, image)
+            st.pyplot(fig)
 
         log_file = Path("logs/demo_queries.log")
         log_file.parent.mkdir(exist_ok=True)
-        log_query(text, mode, log_file)
+        log_query(prompt, head, log_file)
+
+    show_model_info(model, cfg_dict)
+
+
+# -----------------------------------------------------------------------------
+# Main
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--ckpt", default="checkpoints/model.pt")
+    parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--data-dir", default="sample_data")
     args = parser.parse_args()
     run_app(args)
+
