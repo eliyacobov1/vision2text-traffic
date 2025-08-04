@@ -98,10 +98,26 @@ def validate_image(uploaded) -> Optional[Image.Image]:
 
 
 def compute_heatmap(attn: torch.Tensor, image: Image.Image):
-    """Convert attention tensor to a matplotlib figure overlay."""
+    """Convert an attention tensor to a matplotlib figure overlay.
 
-    attn_map = attn[0].mean(0)[0]
-    grid = int(len(attn_map) ** 0.5)
+    The attention tensor may be either ``(B, heads, Q, K)`` when per-head
+    weights are returned or ``(B, Q, K)`` if already averaged. In both cases we
+    select the attention weights for the first query token and reshape them
+    into a square grid matching the vision backbone's patch layout.
+    """
+
+    if attn.ndim == 4:
+        attn_map = attn[0].mean(0)[0]
+    elif attn.ndim == 3:
+        attn_map = attn[0][0]
+    else:
+        raise ValueError(f"Unexpected attention shape: {attn.shape}")
+
+    # Drop the [CLS] token if present so the remaining tokens form a square grid
+    if attn_map.numel() > 1:
+        attn_map = attn_map[1:]
+    num_tokens = attn_map.numel()
+    grid = int(num_tokens ** 0.5)
     heat = attn_map.reshape(grid, grid).cpu().numpy()
     heat = (heat - heat.min()) / (heat.max() - heat.min() + 1e-6)
     heat = np.kron(heat, np.ones((image.size[1] // grid, image.size[0] // grid)))

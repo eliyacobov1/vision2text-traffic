@@ -20,8 +20,16 @@ class CrossAttentionBlock(nn.Module):
 
     def forward(self, x: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
         q = self.norm1(x)
-        attn_out, attn_w = self.attn(q, context, context, need_weights=True)
-        self.last_attn = attn_w  # (B, heads, Q, K)
+        attn_out, attn_w = self.attn(
+            q,
+            context,
+            context,
+            need_weights=True,
+            average_attn_weights=False,
+        )
+        # ``attn_w`` now has shape ``(B, heads, Q, K)`` which allows downstream
+        # visualisation of per-head attention maps.
+        self.last_attn = attn_w
         x = x + attn_out
         ff_out = self.ff(self.norm2(x))
         return x + ff_out
