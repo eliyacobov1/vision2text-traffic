@@ -1,8 +1,6 @@
-import argparse
 import logging
 from pathlib import Path
 import yaml
-from datetime import datetime
 
 import torch
 from torch.utils.data import DataLoader
@@ -13,6 +11,7 @@ from sklearn.metrics import f1_score
 
 from model import VisionLanguageTransformer, VLTConfig
 from utils import TrafficDataset
+from cli import get_parser
 
 
 def load_config(path: str):
@@ -28,20 +27,17 @@ def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     config, train_cfg, data_cfg = load_config(args.config)
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    tag = train_cfg.get("experiment_tag", "default")
-    run_dir = Path("runs") / tag / run_id
-    ckpt_dir = run_dir / "checkpoints"
-    log_dir = run_dir / "logs"
+    ckpt_dir = Path(train_cfg.get("checkpoint_dir", args.checkpoint_dir))
     ckpt_dir.mkdir(parents=True, exist_ok=True)
-    log_dir.mkdir(parents=True, exist_ok=True)
 
     model = VisionLanguageTransformer(config, offline=args.offline).to(device)
 
     dataset = TrafficDataset(data_cfg.get("root", args.data_dir), config.text_model, offline=args.offline)
-    loader = DataLoader(dataset, batch_size=train_cfg.get("batch_size", args.batch_size), shuffle=True)
+    batch_size = int(train_cfg.get("batch_size", args.batch_size))
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    optimizer = Adam(model.parameters(), lr=train_cfg.get("lr", args.lr))
+    lr = float(train_cfg.get("lr", args.lr))
+    optimizer = Adam(model.parameters(), lr=lr)
     scaler = GradScaler(enabled=train_cfg.get("amp", False))
 
     patience = train_cfg.get("early_stop_patience", 3)
@@ -49,8 +45,9 @@ def train(args):
     patience_ctr = 0
     history = []
 
-    logging.info("Starting training for %d epochs", train_cfg.get("epochs", args.epochs))
-    for epoch in range(train_cfg.get("epochs", args.epochs)):
+    epochs = int(train_cfg.get("epochs", args.epochs))
+    logging.info("Starting training for %d epochs", epochs)
+    for epoch in range(epochs):
         model.train()
         total_loss = 0.0
         all_preds = []
@@ -98,13 +95,13 @@ def train(args):
 
     # save metrics
     import json
-    metrics_path = run_dir / "metrics.json"
+    metrics_path = ckpt_dir / "metrics.json"
     with metrics_path.open("w") as f:
         json.dump({"history": history}, f, indent=2)
 
     import pandas as pd
     df = pd.DataFrame(history)
-    df.to_csv(run_dir / "metrics.csv", index=False)
+    df.to_csv(ckpt_dir / "metrics.csv", index=False)
 
     # plot loss/f1 curves
     import matplotlib.pyplot as plt
@@ -117,20 +114,13 @@ def train(args):
     plt.xlabel("Epoch")
     plt.legend()
     plt.title("Training curves")
-    plt.savefig(run_dir / "train_curves.png")
+    plt.savefig(ckpt_dir / "train_curves.png")
     plt.close()
 
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument('--config', default='config.yaml', help='Path to config YAML')
-    p.add_argument('--data-dir', default='sample_data')
-    p.add_argument('--out-dir', default='checkpoints')
-    p.add_argument('--epochs', type=int, default=5)
-    p.add_argument('--batch-size', type=int, default=4)
-    p.add_argument('--lr', type=float, default=1e-4)
-    p.add_argument('--offline', action='store_true', help='Use local files only')
-    return p.parse_args()
+    parser = get_parser()
+    return parser.parse_args()
 
 
 if __name__ == '__main__':

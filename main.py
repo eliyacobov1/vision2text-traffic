@@ -1,4 +1,3 @@
-import argparse
 import logging
 from pathlib import Path
 import subprocess
@@ -6,6 +5,7 @@ import yaml
 
 from train import train
 from evaluate import evaluate
+from cli import get_parser
 
 
 def setup_logging(mode: str, log_dir: str = "logs"):
@@ -26,14 +26,8 @@ def load_config(path: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run VLT experiment")
+    parser = get_parser()
     parser.add_argument("mode", choices=["train", "eval", "demo"], help="stage to run")
-    parser.add_argument("--config", default="config.yaml", help="path to config")
-    parser.add_argument("--ckpt", default="checkpoints/model.pt", help="checkpoint for eval/demo")
-    parser.add_argument("--offline", action="store_true", help="offline mode")
-    parser.add_argument("--data-dir", default="sample_data", help="dataset directory")
-    parser.add_argument("--out-dir", default="eval_outputs", help="eval output directory")
-    parser.add_argument("--log-dir", default="logs", help="where to save logs")
     args = parser.parse_args()
 
     setup_logging(args.mode, args.log_dir)

@@ -1,4 +1,3 @@
-import argparse
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -17,6 +16,7 @@ from torch.utils.data import DataLoader
 
 from model import VisionLanguageTransformer, VLTConfig
 from utils import TrafficDataset
+from cli import get_parser
 
 
 def load_config(path: str):
@@ -101,14 +101,8 @@ def evaluate(args):
 
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument('--config', default='config.yaml', help='Path to config YAML')
-    p.add_argument('--data-dir', default='sample_data')
-    p.add_argument('--ckpt', default='checkpoints/model.pt')
-    p.add_argument('--batch-size', type=int, default=4)
-    p.add_argument('--offline', action='store_true', help='Use local files only')
-    p.add_argument('--out-dir', default='eval_outputs')
-    return p.parse_args()
+    parser = get_parser()
+    return parser.parse_args()
 
 
 if __name__ == '__main__':

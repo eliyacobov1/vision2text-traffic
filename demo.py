@@ -19,6 +19,7 @@ from model import VisionLanguageTransformer, VLTConfig
 from encoders import SimpleTokenizer
 from utils import get_transforms, TrafficDataset
 from transformers import AutoTokenizer
+from cli import get_parser
 
 
 # -----------------------------------------------------------------------------
@@ -260,10 +261,7 @@ def run_app(args: Optional[argparse.Namespace] = None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--ckpt", default="checkpoints/model.pt")
-    parser.add_argument("--config", default="config.yaml")
-    parser.add_argument("--data-dir", default="sample_data")
+    parser = get_parser()
     args = parser.parse_args()
     run_app(args)
 
