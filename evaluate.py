@@ -15,7 +15,7 @@ from sklearn.metrics import (
 from torch.utils.data import DataLoader
 
 from model import VisionLanguageTransformer, VLTConfig
-from utils import TrafficDataset
+from utils import TrafficDataset, HFTrafficDataset
 from cli import get_parser
 
 
@@ -36,7 +36,13 @@ def evaluate(args):
     model.eval()
     logging.info("Loaded model from %s", args.ckpt)
 
-    dataset = TrafficDataset(data_cfg.get("root", args.data_dir), config.text_model, offline=args.offline)
+    ds_name = data_cfg.get("hf_dataset", getattr(args, "hf_dataset", None))
+    split = data_cfg.get("split", getattr(args, "hf_split", "test"))
+    limit = data_cfg.get("limit", getattr(args, "limit", None))
+    if ds_name:
+        dataset = HFTrafficDataset(ds_name, split, config.text_model, limit=limit, offline=args.offline)
+    else:
+        dataset = TrafficDataset(data_cfg.get("root", args.data_dir), config.text_model, offline=args.offline)
     loader = DataLoader(dataset, batch_size=args.batch_size)
 
     preds = []

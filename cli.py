@@ -13,5 +13,8 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epochs", type=int, default=5, help="number of training epochs")
     parser.add_argument("--batch-size", type=int, default=4, help="mini-batch size")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--hf-dataset", default=None, help="HuggingFace dataset name")
+    parser.add_argument("--hf-split", default="train", help="dataset split to use")
+    parser.add_argument("--limit", type=int, default=None, help="limit number of samples")
     return parser
 

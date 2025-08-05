@@ -10,7 +10,7 @@ from torch.cuda.amp import GradScaler, autocast
 from sklearn.metrics import f1_score
 
 from model import VisionLanguageTransformer, VLTConfig
-from utils import TrafficDataset
+from utils import TrafficDataset, HFTrafficDataset
 from cli import get_parser
 
 
@@ -32,7 +32,13 @@ def train(args):
 
     model = VisionLanguageTransformer(config, offline=args.offline).to(device)
 
-    dataset = TrafficDataset(data_cfg.get("root", args.data_dir), config.text_model, offline=args.offline)
+    ds_name = data_cfg.get("hf_dataset", getattr(args, "hf_dataset", None))
+    split = data_cfg.get("split", getattr(args, "hf_split", "train"))
+    limit = data_cfg.get("limit", getattr(args, "limit", None))
+    if ds_name:
+        dataset = HFTrafficDataset(ds_name, split, config.text_model, limit=limit, offline=args.offline)
+    else:
+        dataset = TrafficDataset(data_cfg.get("root", args.data_dir), config.text_model, offline=args.offline)
     batch_size = int(train_cfg.get("batch_size", args.batch_size))
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 

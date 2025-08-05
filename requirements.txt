@@ -10,3 +10,4 @@ timm
 pyyaml
 matplotlib
 pytest
+datasets
