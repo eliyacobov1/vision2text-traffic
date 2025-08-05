@@ -94,6 +94,18 @@ text: "heavy traffic"
 label: 1
 ```
 
+## Training with an Online Dataset
+The training and evaluation scripts can consume image–caption data hosted on Hugging Face. The
+[Flickr8k](https://huggingface.co/datasets/Naveengo/flickr8k) dataset (8k images with captions) is used as an example.
+Captions containing traffic‑related keywords ("car", "bus", "truck", "traffic", "vehicle") are labeled as positive.
+
+```bash
+# train on 100 Flickr8k samples
+python train.py --hf-dataset Naveengo/flickr8k --hf-split train --limit 100 --epochs 1
+# evaluate on 50 validation samples
+python evaluate.py --hf-dataset Naveengo/flickr8k --hf-split test --limit 50 --ckpt checkpoints/model.pt
+```
+
 ## How to Extend This Project
 - **New tasks**: Implement a custom head in `heads.py` and list it in `model.heads` in your config. Examples include captioning or VQA.
 - **Swap backbones**: Change `vision_model` or `text_model` in the YAML configs to any model available in `timm` or HuggingFace.
