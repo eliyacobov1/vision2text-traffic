@@ -37,6 +37,8 @@ Pass `--offline` to the scripts if pretrained models are already cached and no d
 ## Training
 All experiment settings are stored in `config.yaml`. Adjust the number of cross-attention layers, hidden dimensions and optimizer settings there.
 Prepare a `dataset.csv` file with columns `image_url`, `text`, and `label` as in `sample_data/dataset.csv`.
+The repository includes a tiny example dataset under `sample_data/` that links to a few images hosted on [picsum.photos](https://picsum.photos).
+By default `train.py` reads from this directory (`--data-dir sample_data`); replace it with the path to your own training data for meaningful experiments.
 ```bash
 python main.py train --config configs/config_classify.yaml
 ```
@@ -46,6 +48,8 @@ Checkpoints and logs are written to the directory specified in the config.
 ```bash
 python main.py eval --config configs/config_classify.yaml --ckpt checkpoints/model.pt
 ```
+Evaluation expects data in the same CSV format as training. Use `--data-dir` to point at the dataset you wish to evaluate on.
+By default this is also `sample_data`, so provide a different directory if you have a held-out test split.
 The script reports precision, recall, F1 and AUC and saves ROC, PR and confusion matrix plots to `eval_outputs/`.
 
 ## Demo
