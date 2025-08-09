@@ -18,6 +18,8 @@ from model import VisionLanguageTransformer, VLTConfig
 from utils import TrafficDataset, HFTrafficDataset
 from cli import get_parser
 
+logger = logging.getLogger(__name__)
+
 
 def load_config(path: str):
     with open(path) as f:
@@ -34,7 +36,7 @@ def evaluate(args):
     model = VisionLanguageTransformer(config, offline=args.offline).to(device)
     model.load_state_dict(torch.load(args.ckpt, map_location=device))
     model.eval()
-    logging.info("Loaded model from %s", args.ckpt)
+    logger.info("Loaded model from %s", args.ckpt)
 
     ds_name = data_cfg.get("hf_dataset", getattr(args, "hf_dataset", None))
     split = data_cfg.get("split", getattr(args, "hf_split", "test"))
@@ -59,9 +61,19 @@ def evaluate(args):
 
     preds_tensor = torch.tensor(preds)
     labels_tensor = torch.tensor(labels).float()
-    precision, recall, f1, _ = precision_recall_fscore_support(labels_tensor, preds_tensor > 0.5, average="binary")
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        labels_tensor, preds_tensor > 0.5, average="binary"
+    )
     auc = roc_auc_score(labels_tensor, preds_tensor)
-    logging.info("Precision: %.4f Recall: %.4f F1: %.4f AUC: %.4f", precision, recall, f1, auc)
+    accuracy = (preds_tensor > 0.5).eq(labels_tensor).float().mean().item()
+    logger.info(
+        "Precision: %.4f Recall: %.4f F1: %.4f AUC: %.4f Acc: %.4f",
+        precision,
+        recall,
+        f1,
+        auc,
+        accuracy,
+    )
 
     run_dir = Path(args.out_dir) / datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -96,6 +108,7 @@ def evaluate(args):
         "recall": float(recall),
         "f1": float(f1),
         "auc": float(auc),
+        "accuracy": float(accuracy),
     }
     with (run_dir / "metrics.json").open("w") as f:
         json.dump(metrics, f, indent=2)
@@ -103,7 +116,7 @@ def evaluate(args):
     import pandas as pd
     pd.DataFrame({"pred": preds, "label": labels}).to_csv(run_dir / "predictions.csv", index=False)
 
-    logging.info("Evaluation complete. Outputs saved to %s", run_dir)
+    logger.info("Evaluation complete. Outputs saved to %s", run_dir)
 
 
 def parse_args():
@@ -112,5 +125,6 @@ def parse_args():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
     args = parse_args()
     evaluate(args)

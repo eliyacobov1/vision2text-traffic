@@ -1,4 +1,5 @@
 import csv
+import logging
 from io import BytesIO
 from pathlib import Path
 from typing import List, Tuple
@@ -12,6 +13,8 @@ from PIL import Image
 from transformers import AutoTokenizer
 from datasets import load_dataset
 from encoders import SimpleTokenizer
+
+logger = logging.getLogger(__name__)
 
 
 def get_transforms(image_size: int = 224):
@@ -59,6 +62,8 @@ class TrafficDataset(Dataset):
                     text = text_file.read_text().strip()
                     self.samples.append((img.as_posix(), text, label))
 
+        logger.info("Loaded %d samples from %s", len(self.samples), self.root)
+
     def __len__(self) -> int:
         return len(self.samples)
 
@@ -101,6 +106,7 @@ class HFTrafficDataset(Dataset):
             self.samples.append((img, text, label))
             if limit and len(self.samples) >= limit:
                 break
+        logger.info("Loaded %d samples from %s:%s", len(self.samples), name, split)
 
     def __len__(self) -> int:  # pragma: no cover - simple getter
         return len(self.samples)
