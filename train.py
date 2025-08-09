@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torch.nn.functional import binary_cross_entropy
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from sklearn.metrics import f1_score
 
 from model import VisionLanguageTransformer, VLTConfig
@@ -64,7 +64,7 @@ def train(args):
             attention_mask = attention_mask.to(device)
             labels = labels.float().to(device)
 
-            with autocast(enabled=train_cfg.get("amp", False)):
+            with autocast(device.type, enabled=train_cfg.get("amp", False)):
                 out = model(images, input_ids, attention_mask)
                 preds = out["classification"] if isinstance(out, dict) else out
                 loss = binary_cross_entropy(preds, labels)

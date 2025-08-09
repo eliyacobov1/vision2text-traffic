@@ -22,6 +22,10 @@ from transformers import AutoTokenizer
 from cli import get_parser
 
 
+# Use CUDA if available, otherwise fall back to CPU
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 # -----------------------------------------------------------------------------
 # Loading utilities
 
@@ -44,10 +48,11 @@ def load_model(ckpt: str | None, cfg_path: str | None, offline: bool = False) ->
     config, cfg_dict = load_config(cfg_path)
     model = VisionLanguageTransformer(config, offline=offline)
     if ckpt and Path(ckpt).exists():
-        state = torch.load(ckpt, map_location="cpu")
+        state = torch.load(ckpt, map_location=DEVICE)
         model.load_state_dict(state, strict=False)
     else:
         logging.warning("Checkpoint %s not found; using randomly initialised weights", ckpt)
+    model.to(DEVICE)
     model.eval()
     return model, cfg_dict
 
@@ -62,7 +67,9 @@ def encode_dataset_images(model: VisionLanguageTransformer, dataset: TrafficData
     loader = torch.utils.data.DataLoader(dataset, batch_size=4)
     img_embs: List[torch.Tensor] = []
     with torch.no_grad():
+        device = next(model.parameters()).device
         for imgs, _, _, _ in loader:
+            imgs = imgs.to(device)
             img_tokens = model.img_proj(model.vision(imgs))
             if "contrastive" in model.heads:
                 head = model.heads["contrastive"]
@@ -70,7 +77,7 @@ def encode_dataset_images(model: VisionLanguageTransformer, dataset: TrafficData
             else:
                 emb = img_tokens.mean(dim=1)
             img_embs.append(emb)
-    return torch.cat(img_embs) if img_embs else torch.empty(0, model.config.hidden_dim)
+    return torch.cat(img_embs) if img_embs else torch.empty(0, model.config.hidden_dim, device=device)
 
 
 # -----------------------------------------------------------------------------
@@ -214,13 +221,13 @@ def run_app(args: Optional[argparse.Namespace] = None):
 
     if image is not None and prompt:
         st.image(image, caption="Input image", use_column_width=True)
-        img_tensor = transform(image).unsqueeze(0)
+        img_tensor = transform(image).unsqueeze(0).to(DEVICE)
         prompts = [tpl.replace("{}", prompt) if "{}" in tpl else f"{tpl} {prompt}" for tpl in templates] or [prompt]
         probs: List[float] = []
         attn = None
         img_emb = txt_emb = None
         for p in prompts:
-            tokens = tokenizer(p, return_tensors="pt", padding=True)
+            tokens = tokenizer(p, return_tensors="pt", padding=True).to(DEVICE)
             with torch.no_grad():
                 out = model(img_tensor, tokens["input_ids"], tokens["attention_mask"])
                 attn = model.get_last_attention()
@@ -237,7 +244,7 @@ def run_app(args: Optional[argparse.Namespace] = None):
 
         if head == "contrastive" and img_emb is not None and retrieval_img_embs is not None and len(retrieval_img_embs) > 0:
             sims = (retrieval_img_embs @ img_emb.T).squeeze(1)
-            top_idx = int(torch.topk(sims, 1).indices[0])
+            top_idx = int(torch.topk(sims, 1).indices[0].item())
             url, caption, _ = dataset.samples[top_idx]
             headers = {"User-Agent": "Mozilla/5.0"}
             resp = requests.get(url, timeout=10, headers=headers)
