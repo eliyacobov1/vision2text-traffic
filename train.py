@@ -13,6 +13,8 @@ from model import VisionLanguageTransformer, VLTConfig
 from utils import TrafficDataset, HFTrafficDataset
 from cli import get_parser
 
+logger = logging.getLogger(__name__)
+
 
 def load_config(path: str):
     with open(path) as f:
@@ -52,7 +54,7 @@ def train(args):
     history = []
 
     epochs = int(train_cfg.get("epochs", args.epochs))
-    logging.info("Starting training for %d epochs", epochs)
+    logger.info("Starting training for %d epochs", epochs)
     for epoch in range(epochs):
         model.train()
         total_loss = 0.0
@@ -78,26 +80,38 @@ def train(args):
             all_preds.extend(preds.detach().cpu())
             all_labels.extend(labels.cpu())
 
+        preds_tensor = torch.tensor(all_preds)
+        labels_tensor = torch.tensor(all_labels)
         avg_loss = total_loss / len(dataset)
-        f1 = f1_score(torch.tensor(all_labels), torch.tensor(all_preds) > 0.5)
-        history.append({"epoch": epoch + 1, "loss": avg_loss, "f1": float(f1)})
-        logging.info("Epoch %d: loss=%.4f f1=%.4f", epoch + 1, avg_loss, f1)
+        f1 = f1_score(labels_tensor, preds_tensor > 0.5)
+        accuracy = (preds_tensor > 0.5).eq(labels_tensor).float().mean().item()
+        history.append(
+            {
+                "epoch": epoch + 1,
+                "loss": avg_loss,
+                "f1": float(f1),
+                "accuracy": accuracy,
+            }
+        )
+        logger.info(
+            "Epoch %d: loss=%.4f acc=%.4f f1=%.4f", epoch + 1, avg_loss, accuracy, f1
+        )
 
         if f1 > best_f1:
             best_f1 = f1
             patience_ctr = 0
             ckpt = ckpt_dir / "model.pt"
             torch.save(model.state_dict(), ckpt)
-            logging.info("Saved checkpoint to %s", ckpt)
+            logger.info("Saved checkpoint to %s", ckpt)
         else:
             patience_ctr += 1
             if patience_ctr >= patience:
-                logging.info("Early stopping")
+                logger.info("Early stopping")
                 break
 
     ckpt = ckpt_dir / "model_last.pt"
     torch.save(model.state_dict(), ckpt)
-    logging.info("Final checkpoint saved to %s", ckpt)
+    logger.info("Final checkpoint saved to %s", ckpt)
 
     # save metrics
     import json
@@ -114,9 +128,11 @@ def train(args):
     epochs = [h["epoch"] for h in history]
     losses = [h["loss"] for h in history]
     f1s = [h["f1"] for h in history]
+    accs = [h["accuracy"] for h in history]
     plt.figure()
     plt.plot(epochs, losses, label="loss")
     plt.plot(epochs, f1s, label="f1")
+    plt.plot(epochs, accs, label="accuracy")
     plt.xlabel("Epoch")
     plt.legend()
     plt.title("Training curves")
@@ -130,5 +146,6 @@ def parse_args():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
     args = parse_args()
     train(args)
