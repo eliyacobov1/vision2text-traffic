@@ -1,6 +1,12 @@
 # Vision-Language Traffic Congestion Detector
 
-A prototype that combines a frozen Vision Transformer and DistilBERT to score traffic congestion. The model accepts a road image and a short text prompt such as "heavy traffic" or "clear road" and returns a probability that the scene matches the prompt. When the contrastive head is enabled, it can also retrieve similar examples from the training data.
+This project explores a compact vision-language model for scoring traffic congestion. A frozen Vision Transformer encodes the road image while DistilBERT embeds a short text prompt such as "heavy traffic" or "clear road." Their representations are fused with cross-attention to predict how well the image matches the prompt. When the contrastive head is activated, the model can also retrieve similar examples from the training set.
+
+## Features
+- Image–text classification with frozen encoders
+- Optional contrastive retrieval head for nearest-neighbor search
+- Configuration-driven training and evaluation
+- Lightweight CLI demo for quick experimentation
 
 ## Architecture
 ### Encoders
@@ -17,9 +23,9 @@ Two cross-attention blocks let text tokens attend to image tokens, producing fus
 - **Contrastive head** – projects averaged image tokens and the text `[CLS]` into a shared embedding space. An InfoNCE loss aligns matching image-text pairs and separates mismatched pairs, enabling retrieval.
 
 ## Data and Training
-Training expects a CSV file with `image_url`, `text`, and `label` columns (see `sample_data/dataset.csv`). Images download on demand and cache locally. A YAML config file sets hyperparameters, augmentation, and whether the contrastive head is active. Checkpoints go to `checkpoints/` and TensorBoard logs to `runs/`.
+Training expects a CSV file with `image_url`, `text`, and `label` columns (see `sample_data/dataset.csv`). Images download on demand and cache locally. A YAML config file defines hyperparameters, augmentation, and whether the contrastive head is active. Checkpoints are written to `checkpoints/` and TensorBoard logs to `runs/`.
 
-## Usage
+## Quick Start
 ### Setup
 Install dependencies and run tests:
 
@@ -28,7 +34,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-### Train
+### Train a Model
 
 ```bash
 python main.py train --config configs/config_classify.yaml
@@ -40,14 +46,14 @@ python main.py train --config configs/config_classify.yaml
 python main.py eval --config configs/config_classify.yaml --ckpt checkpoints/model.pt
 ```
 
-### Demo
+### Run the Demo
 
 ```bash
 ./run_demo.sh --ckpt checkpoints/model.pt --config config.yaml
 ```
 
 ### Example CLI Query
-After training, you can obtain a congestion score and nearest example:
+After training, obtain a congestion score and nearest example:
 
 ```bash
 python cli.py --ckpt checkpoints/model.pt --image sample_data/jam.jpg --text "heavy traffic"
@@ -58,6 +64,6 @@ python cli.py --ckpt checkpoints/model.pt --image sample_data/jam.jpg --text "he
 - Not optimized for production deployment.
 - Future improvements could include fine-tuning the encoders, richer augmentations, and multi-level congestion labels.
 
-## Project scope
-This is a personal project that demonstrates how to wire together vision and language modules for basic traffic analysis.
+## Project Scope
+This repository is a personal prototype that demonstrates how to wire together vision and language modules for basic traffic analysis.
 
